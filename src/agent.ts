@@ -11,6 +11,7 @@ import {
   ERC20_TRANSFER_EVENT,
 } from "./utils";
 import Web3 from "web3";
+import BigNumber from "bignumber.js";
 
 const web3 = new Web3();
 
@@ -23,7 +24,8 @@ const handleTransaction: HandleTransaction = async (txEvent) => {
     }))
     .filter(
       ({ from, amount }) =>
-        from === COMPTROLLER_ADDRESS && BigInt(amount) > BigInt(COMP_THRESHOLD)
+        from === COMPTROLLER_ADDRESS &&
+        new BigNumber(amount).gt(new BigNumber(COMP_THRESHOLD))
     )
     .map(({ amount }) =>
       Finding.fromObject({
