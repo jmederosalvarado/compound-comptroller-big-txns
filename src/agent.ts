@@ -1,19 +1,31 @@
+import BigNumber from "bignumber.js";
 import {
   Finding,
   FindingSeverity,
   FindingType,
   HandleTransaction,
 } from "forta-agent";
+import Web3 from "web3";
 import {
   COMPTROLLER_ADDRESS,
   COMP_ADDRESS,
   COMP_THRESHOLD,
   ERC20_TRANSFER_EVENT,
 } from "./utils";
-import Web3 from "web3";
-import BigNumber from "bignumber.js";
 
 const web3 = new Web3();
+
+export const createFinding = (amount: string) =>
+  Finding.fromObject({
+    name: "Big transaction out of Comptroller",
+    description: `An amount greater than ${COMP_THRESHOLD} COMP was moved out of Comptroller`,
+    alertId: "COMPOUND_COMPTROLLER_ALERT",
+    severity: FindingSeverity.Medium,
+    type: FindingType.Suspicious,
+    metadata: {
+      amountTransfered: amount,
+    },
+  });
 
 const handleTransaction: HandleTransaction = async (txEvent) => {
   return txEvent
@@ -24,21 +36,10 @@ const handleTransaction: HandleTransaction = async (txEvent) => {
     }))
     .filter(
       ({ from, amount }) =>
-        from === COMPTROLLER_ADDRESS &&
+        from.toLowerCase() === COMPTROLLER_ADDRESS.toLowerCase() &&
         new BigNumber(amount).gt(new BigNumber(COMP_THRESHOLD))
     )
-    .map(({ amount }) =>
-      Finding.fromObject({
-        name: "Big transaction out of Comptroller",
-        description: `An amount greater than ${COMP_THRESHOLD} COMP was moved out of Comptroller`,
-        alertId: "COMPOUND_COMPTROLLER_ALERT",
-        severity: FindingSeverity.Medium,
-        type: FindingType.Suspicious,
-        metadata: {
-          amountTransfered: amount,
-        },
-      })
-    );
+    .map(({ amount }) => createFinding(amount));
 };
 
 export default {

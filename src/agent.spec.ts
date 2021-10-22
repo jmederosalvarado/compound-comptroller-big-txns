@@ -1,18 +1,23 @@
+import BigNumber from "bignumber.js";
 import {
-  TransactionEvent,
-  FindingType,
-  FindingSeverity,
-  Finding,
   EventType,
-  Network,
   HandleTransaction,
-  Log,
-  Transaction,
+  Network,
   Trace,
+  Transaction,
+  TransactionEvent,
   TxEventBlock,
 } from "forta-agent";
-import agent from "./agent";
-import { COMP_ADDRESS } from "./utils";
+import Web3 from "web3";
+import agent, { createFinding } from "./agent";
+import {
+  COMPTROLLER_ADDRESS,
+  COMP_ADDRESS,
+  COMP_THRESHOLD,
+  ERC20_TRANSFER_EVENT,
+} from "./utils";
+
+const web3 = new Web3();
 
 describe("Detect Very High Txn Value", () => {
   let handleTransaction: HandleTransaction;
@@ -21,8 +26,16 @@ describe("Detect Very High Txn Value", () => {
     handleTransaction = agent.handleTransaction;
   });
 
-  const createTxEvent = (from, to, amount): TransactionEvent => {
+  const createTxEvent = (
+    from: string,
+    to: string,
+    amount: any
+  ): TransactionEvent => {
     const blockNumber = 0;
+    const blockHash = "";
+    const txHash = "";
+    const txIdx = 0;
+
     return new TransactionEvent(
       EventType.BLOCK,
       Network.MAINNET,
@@ -31,28 +44,44 @@ describe("Detect Very High Txn Value", () => {
         root: "",
         logs: [
           {
-            address: 
-          }
+            address: COMP_ADDRESS,
+            data: web3.eth.abi.encodeParameter("uint256", amount),
+            topics: [
+              web3.utils.keccak256(ERC20_TRANSFER_EVENT),
+              web3.eth.abi.encodeParameter("address", from),
+              web3.eth.abi.encodeParameter("address", to),
+            ],
+            removed: false,
+            logIndex: 0,
+            blockHash: blockHash,
+            blockNumber: blockNumber,
+            transactionHash: txHash,
+            transactionIndex: txIdx,
+          },
         ],
         status: true,
         gasUsed: "",
-        blockHash: "",
+        blockHash: blockHash,
         logsBloom: "",
         blockNumber: blockNumber,
         contractAddress: COMP_ADDRESS,
-        transactionHash: "0x01",
-        transactionIndex: 0,
+        transactionHash: txHash,
+        transactionIndex: txIdx,
         cumulativeGasUsed: "",
       },
       [] as Trace[],
-      {} as any,
+      { [COMP_ADDRESS]: true },
       {} as TxEventBlock
     );
   };
 
   describe("Handle Transaction", () => {
     it("returns empty findings if value is below threshold", async () => {
-      const txEvent = createTxEvent(from, to, amount);
+      const txEvent = createTxEvent(
+        COMPTROLLER_ADDRESS,
+        "0x0000000000000000000000000000000000000001",
+        "2"
+      );
 
       const findings = await handleTransaction(txEvent);
 
@@ -60,9 +89,11 @@ describe("Detect Very High Txn Value", () => {
     });
 
     it("returns empty findings if value is equal to threshold", async () => {
-      const txEvent = createTxEvent({
-        transaction: { value: TX_VALUE_THRESHHOLD },
-      });
+      const txEvent = createTxEvent(
+        COMPTROLLER_ADDRESS,
+        "0x0000000000000000000000000000000000000001",
+        COMP_THRESHOLD
+      );
 
       const findings = await handleTransaction(txEvent);
 
@@ -70,22 +101,18 @@ describe("Detect Very High Txn Value", () => {
     });
 
     it("returns a findings if value is above threshold", async () => {
-      const value = 101 * DECIMALS;
-      const txEvent = createTxEvent({
-        transaction: { value: value },
-      });
+      const amount = new BigNumber(COMP_THRESHOLD)
+        .plus(new BigNumber("10"))
+        .toString();
+      const txEvent = createTxEvent(
+        COMPTROLLER_ADDRESS,
+        "0x0000000000000000000000000000000000000001",
+        amount
+      );
 
       const findings = await handleTransaction(txEvent);
 
-      expect(findings).toStrictEqual([
-        Finding.fromObject({
-          name: "High Values Transaction Detected",
-          description: `Value is: ${value}`,
-          alertId: "NETHFORTA-2",
-          severity: FindingSeverity.High,
-          type: FindingType.Suspicious,
-        }),
-      ]);
+      expect(findings).toStrictEqual([createFinding(amount)]);
     });
   });
 });
